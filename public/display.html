@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大螢幕投影觀看端 - 祝福夜空</title>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@700&family=Noto+Sans+TC:wght@900&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: radial-gradient(circle at 50% 30%, #1e1b4b 0%, #0b0b26 100%);
+            overflow: hidden;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Quicksand', 'Noto Sans TC', sans-serif;
+        }
+
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            opacity: 0.3;
+            animation: twinkle var(--duration) ease-in-out infinite;
+        }
+        @keyframes twinkle { 0%, 100% { opacity: 0.1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.2); } }
+
+        .balloon-container {
+            position: absolute;
+            bottom: -500px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            will-change: transform;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        @keyframes floatPath {
+            0% { transform: translate3d(0, 0, 0) rotate(0deg); }
+            20% { transform: translate3d(50px, -30vh, 0) rotate(4deg); }
+            40% { transform: translate3d(-50px, -60vh, 0) rotate(-4deg); }
+            60% { transform: translate3d(40px, -90vh, 0) rotate(3deg); }
+            80% { transform: translate3d(-30px, -120vh, 0) rotate(-2deg); }
+            100% { transform: translate3d(0, -170vh, 0) rotate(0deg); }
+        }
+
+        .balloon-wrap {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            animation: pulse 4s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.03); }
+        }
+
+        .balloon-image {
+            width: 300px;
+            height: 300px;
+            object-fit: contain;
+            filter: drop-shadow(0 0 40px rgba(255,255,255,0.4));
+        }
+
+        .photo-charm {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 4px solid white;
+            object-fit: cover;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            z-index: 5;
+            filter: saturate(1.5) contrast(1.1);
+        }
+
+        .balloon-line {
+            width: 3px;
+            height: 120px;
+            background: linear-gradient(to bottom, rgba(255,255,255,0.5), transparent);
+            margin-top: -20px;
+            animation: stringSway 3s ease-in-out infinite;
+        }
+        @keyframes stringSway { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
+
+        .balloon-name {
+            margin-top: 25px;
+            color: #fff;
+            font-weight: 900;
+            font-size: 2.2rem;
+            max-width: 450px;
+            text-align: center;
+            line-height: 1.2;
+            word-wrap: break-word;
+            text-shadow: 0 0 20px rgba(0,0,0,0.8), 0 0 30px var(--glow-color, rgba(255,255,255,0.5));
+            letter-spacing: -1px;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 8px 30px;
+            border-radius: 50px;
+            backdrop-filter: blur(5px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .header-ui {
+            position: fixed;
+            top: 60px;
+            width: 100%;
+            text-align: center;
+            z-index: 100;
+            opacity: 0.4;
+        }
+    </style>
+</head>
+<body>
+    <div id="sky"></div>
+    <div class="header-ui">
+        <h1 class="text-7xl font-black tracking-[0.5rem] text-white">CELEBRATION</h1>
+        <p class="text-xl tracking-[1rem] text-pink-400 mt-2 uppercase">祝福氣球發射現場</p>
+    </div>
+
+    <div id="displayArea" class="relative w-full h-full"></div>
+
+    <script>
+        const socket = io();
+        const displayArea = document.getElementById('displayArea');
+        const sky = document.getElementById('sky');
+
+        function createStars() {
+            for (let i = 0; i < 150; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                const size = Math.random() * 3 + 1;
+                star.style.width = size + 'px'; star.style.height = size + 'px';
+                star.style.left = Math.random() * 100 + '%'; star.style.top = Math.random() * 100 + '%';
+                star.style.setProperty('--duration', (Math.random() * 3 + 2) + 's');
+                sky.appendChild(star);
+            }
+        }
+        createStars();
+
+        let lastLane = -1;
+        const totalLanes = 8; // Divide screen into 8 vertical lanes to spread balloons
+
+        socket.on('newBalloon', (data) => {
+            const container = document.createElement('div');
+            container.className = 'balloon-container';
+            
+            // Smarter X-positioning: pick a lane that is different from the last one
+            let lane;
+            do {
+                lane = Math.floor(Math.random() * totalLanes);
+            } while (lane === lastLane && totalLanes > 1);
+            lastLane = lane;
+
+            const laneWidth = (window.innerWidth - 300) / totalLanes;
+            const randomOffset = Math.random() * (laneWidth * 0.6); // Jitter within the lane
+            const xPos = 50 + (lane * laneWidth) + randomOffset;
+            
+            container.style.left = `${xPos}px`;
+            container.style.animation = `floatPath ${14 + Math.random() * 8}s cubic-bezier(0.4, 0, 0.6, 1) forwards`;
+
+            const wrap = document.createElement('div');
+            wrap.className = 'balloon-wrap';
+
+            // Heart Drawing
+            const img = document.createElement('img');
+            img.src = data.image;
+            img.className = 'balloon-image';
+            img.style.filter = `drop-shadow(0 0 45px ${data.color})`;
+
+            // Q-Photo
+            if (data.photo) {
+                const photo = document.createElement('img');
+                photo.src = data.photo;
+                photo.className = 'photo-charm';
+                wrap.appendChild(photo);
+            }
+
+            const line = document.createElement('div');
+            line.className = 'balloon-line';
+
+            const nameLabel = document.createElement('div');
+            nameLabel.className = 'balloon-name';
+            nameLabel.style.setProperty('--glow-color', data.color);
+            nameLabel.innerText = data.name;
+
+            wrap.appendChild(img);
+            container.appendChild(wrap);
+            container.appendChild(line);
+            container.appendChild(nameLabel);
+            displayArea.appendChild(container);
+
+            container.addEventListener('animationend', () => container.remove());
+        });
+    </script>
+</body>
+</html>

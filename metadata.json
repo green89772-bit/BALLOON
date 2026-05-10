@@ -1,0 +1,6 @@
+{
+  "name": "愛心氣球祝福發射站",
+  "description": "即時互動氣球發射應用，適用於演講比賽中場，讓家長透過手機發射祝福氣球到大螢幕。",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}
